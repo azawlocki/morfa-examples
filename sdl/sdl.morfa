@@ -1,0 +1,361 @@
+// Minimal Morfa bindings to SDL 2
+
+module sdl.sdl;
+
+
+
+// Exception thrown when an SDL function signals an error
+class SDLCallError: Exception
+{
+    import mcl.Text.decoders: decodeAsciiZ;
+
+    pragma(mangledname, "SDL_GetError")
+    static func SDL_GetError(): pointer<int8>;
+
+    func new(functionName: text)
+    {
+        var sdlErrorMsg = decodeAsciiZ(SDL_GetError());
+        var report = "Error when calling " ~ functionName ~ ": " ~ sdlErrorMsg;
+        super.new(report);
+    }   
+}
+
+
+// A structure for grouping basic SDL functions
+public struct SDL
+{
+    public const INIT_VIDEO: int32 = 0x00000020;
+
+    public static func initVideo(): void
+    {
+        pragma(mangledname, "SDL_Init")
+        static func SDL_Init(int32): int32;
+
+        if (SDL_Init(INIT_VIDEO) != 0)
+            throw new SDLCallError("SDL_Init");
+    }
+
+    public static func quit(): void
+    {
+        pragma(mangledname, "SDL_Quit")
+        static func SDL_Quit(): void;
+
+        SDL_Quit();
+    }
+
+    public static func delay(seconds: float): void
+    {
+        pragma(mangledname, "SDL_Delay")
+        static func SDL_Delay(int32): void;
+
+        SDL_Delay(cast<int32>(seconds * 1000));
+    }
+}
+
+
+// Wraps a pointer to an SDL_Window
+public class SDLWindow
+{
+    public const SHOWN : int32 = 0x00000002;
+
+    private var ptr: pointer<int8>;  // SDL_Window*
+
+    public func new(title: text, x: int32, y: int32, w: int32, h: int32, 
+                    flags: int32 = SHOWN)
+    {
+        pragma(mangledname, "SDL_CreateWindow")
+        static func SDL_CreateWindow(pointer<int8>, int32, int32, int32, int32, int32): pointer<int8>;
+
+        ptr = SDL_CreateWindow(title.encodeAsciiZ(),    
+                               x, y, w, h, 
+                               SHOWN);
+        if (ptr == null)
+            throw new SDLCallError("SDL_CreateWindow");
+    }   
+
+    func delete()
+    {
+        pragma(mangledname, "SDL_DestroyWindow")
+        static func SDL_DestroyWindow(pointer<int8>): void;
+
+        SDL_DestroyWindow(ptr);
+    }
+}       
+
+
+// Wraps a pointer to an SDL_Renderer and some drawing functions with SDL_Render... prefix
+public class SDLRenderer
+{
+    const ACCELERATED : int32 =  0x00000002;
+    const PRESENTVSYNC : int32 = 0x00000004;
+
+    private var ptr: pointer<int8>; // SDL_Renderer*
+
+    public func new(window: SDLWindow)
+    {
+        pragma(mangledname, "SDL_CreateRenderer")
+        static func SDL_CreateRenderer(pointer<int8>, int32, int32): pointer<int8>;
+        assert(window != null);
+        assert(window.ptr != null);
+
+        ptr = SDL_CreateRenderer(window.ptr, cast<int32> -1, 0x00000006);
+        if (ptr == null)
+            throw new SDLCallError("SDL_CreateRenderer");
+    }   
+
+    func delete()
+    {
+        pragma(mangledname, "SDL_DestroyRenderer")
+        static func SDL_DestroyRenderer(pointer<int8>): void;
+
+        SDL_DestroyRenderer(ptr);
+    }   
+
+    public func clear(): void
+    {
+        pragma(mangledname, "SDL_RenderClear")
+        static func SDL_RenderClear(pointer<int8>): int32;
+    
+        if (SDL_RenderClear(ptr) != 0)
+            throw new SDLCallError("SDL_RenderClear");
+    }   
+
+    public func copy(texture: SDLTexture): void
+    {
+        pragma(mangledname, "SDL_RenderCopy")
+        static func SDL_RenderCopy(pointer<int8>, pointer<int8>, pointer<int8>, pointer<int8>): int32;
+
+        if (SDL_RenderCopy(ptr, texture.ptr, null, null) != 0)
+            throw new SDLCallError("SDL_RenderCopy");
+    }
+
+    public func present(): void
+    {
+        pragma(mangledname, "SDL_RenderPresent")
+        static func SDL_RenderPresent(pointer<int8>): void;
+
+        SDL_RenderPresent(ptr); 
+    }   
+
+    public func drawLine(x1: int32, y1: int32, x2: int32, y2: int32): void
+    {   
+        pragma(mangledname, "SDL_RenderDrawLine")
+        static func SDL_RenderDrawLine(pointer<int8>, int32, int32, int32, int32): int32;
+
+        if (SDL_RenderDrawLine(ptr, x1, y1, x2, y2) < 0)
+            throw new SDLCallError("SDL_RenderDrawLine");
+    }
+
+    public func drawRect(x: int32, y: int32, w: int32, h: int32): void
+    {
+	    pragma(mangledname, "SDL_RenderDrawRect")
+	    static func SDL_RenderDrawRect(pointer<int8>, pointer<int8>): int32;
+
+	    var rect: int32[4] = [x,y,w,h];
+	    if (SDL_RenderDrawRect(ptr, cast<pointer<int8>> addressof(rect)) < 0)
+	        throw new SDLCallError("SDL_RenderDrawRect");
+    }
+
+    public func fillRect(x: int32, y: int32, w: int32, h: int32): void
+    {
+	    pragma(mangledname, "SDL_RenderFillRect")
+	    static func SDL_RenderFillRect(pointer<int8>, pointer<int8>): int32;
+
+	    var rect: int32[4] = [x,y,w,h];
+	    if (SDL_RenderFillRect(ptr, cast<pointer<int8>> addressof(rect)) < 0)
+	        throw new SDLCallError("SDL_RenderFillRect");
+    }
+
+    public func drawPoint(x: int32, y: int32): void
+    {
+        pragma(mangledname, "SDL_RenderDrawPoint")
+        static func SDL_RenderDrawPoint(pointer<int8>, int32, int32): int32;
+
+        if (SDL_RenderDrawPoint(ptr, x, y) < 0)
+            throw new SDLCallError("SDL_RenderDrawPoint");
+    }   
+
+    // Code borrowed from
+    // http://content.gpwiki.org/index.php/SDL:Tutorials:Drawing_and_Filling_Circles
+    public func drawCircle(n_cx: int32, n_cy: int32, radius: int32): void
+    {
+        // TODO: switch to SDL_RenderDrawPoints()
+        // TODO: check for errors in SDL functions
+        pragma(mangledname, "SDL_RenderDrawPoint")
+        static func SDL_RenderDrawPoint(pointer<int8>, int32, int32): int32;
+
+        var error: float = cast<float> -radius;
+        var x: float  = radius - 0.5;
+        var y: float  = 0.5;      
+        var cx: float = n_cx - 0.5;
+        var cy: float = n_cy - 0.5;
+
+        while (x >= y)
+        {
+            SDL_RenderDrawPoint(ptr, cast<int32>(cx + x), cast<int32>(cy + y));
+            SDL_RenderDrawPoint(ptr, cast<int32>(cx + y), cast<int32>(cy + x));
+
+            if (x != 0)
+            {
+                SDL_RenderDrawPoint(ptr, cast<int32>(cx - x), cast<int32>(cy + y));
+                SDL_RenderDrawPoint(ptr, cast<int32>(cx + y), cast<int32>(cy - x));
+            }           
+
+            if (y != 0)
+            {
+                SDL_RenderDrawPoint(ptr, cast<int32>(cx + x), cast<int32>(cy - y));
+                SDL_RenderDrawPoint(ptr, cast<int32>(cx - y), cast<int32>(cy + x));
+            }      
+
+            if (x != 0 and y != 0)
+            {
+                SDL_RenderDrawPoint(ptr, cast<int32>(cx - x), cast<int32>(cy - y));
+                SDL_RenderDrawPoint(ptr, cast<int32>(cx - y), cast<int32>(cy - x));
+            }   
+
+            error += y;
+            y += 1;
+            error += y;
+
+            if (error >= 0) 
+            {
+                x -= 1;
+                error -= x;
+                error -= x;
+            }         
+        }       
+    }   
+}
+
+
+unittest
+{
+    SDL.initVideo();
+
+    var window = new SDLWindow("Hello World!", 100, 100, 640, 400);
+    var renderer = new SDLRenderer(window);
+
+    renderer.clear();
+    renderer.fillRect(50, 50, 150, 50);
+    renderer.drawRect(10, 10, 620, 380);
+    renderer.drawLine(0, 0, 640, 400);
+    renderer.drawCircle(480, 300, 60);
+    renderer.present();
+
+    SDL.delay(3.0);
+    SDL.quit();
+}
+
+
+
+// Wraps a pointer to SDLSurface
+public class SDLSurface 
+{
+    private var ptr: pointer<int8>; // SDL_Surface*    
+
+    public func new (BMPFilePath: text)
+    {
+        pragma(mangledname, "SDL_RWFromFile")
+        static func SDL_RWFromFile(pointer<int8>, pointer<int8>): pointer<int8>;
+
+        pragma(mangledname, "SDL_LoadBMP_RW")
+        static func SDL_LoadBMP_RW(pointer<int8>, int32): pointer<int8>;
+
+        var fileRW = SDL_RWFromFile(BMPFilePath.encodeAsciiZ(),
+                                    "rb".encodeAsciiZ());
+        if (fileRW == null)
+            throw new SDLCallError("SDL_RWFromFile");
+
+        ptr = SDL_LoadBMP_RW(fileRW, 1);
+        if (ptr == null)
+           throw new SDLCallError("SDL_LoadBMP_RW");
+    }   
+
+    func delete()
+    {    
+        pragma(mangledname, "SDL_FreeSurface")
+        static func SDL_FreeSurface(pointer<int8>): void;
+
+        SDL_FreeSurface(ptr);
+    }
+}
+
+
+// Wraps a pointer to SDL_Texture
+public class SDLTexture
+{
+    private var ptr: pointer<int8>; // SDL_Texture*
+
+    public func new(renderer: SDLRenderer, surface: SDLSurface)
+    {   
+        pragma(mangledname, "SDL_CreateTextureFromSurface")
+        static func SDL_CreateTextureFromSurface(pointer<int8>, pointer<int8>): pointer<int8>;
+
+        ptr = SDL_CreateTextureFromSurface(renderer.ptr, surface.ptr);
+        if (ptr == null)
+           throw new SDLCallError("SDL_CreateTextureFromSurface");
+    }   
+
+    public func new(renderer: SDLRenderer, BMPFilePath: text)
+    {
+        var surface = new SDLSurface(BMPFilePath);
+        this.new(renderer, surface);    
+    }   
+
+    func delete()
+    {    
+        pragma(mangledname, "SDL_DestroyTexture")
+        static func SDL_DestroyTexture(pointer<int8>): void;
+
+        SDL_DestroyTexture(ptr);
+    }
+}
+
+
+public struct SDLScancode
+{
+    var value: int;
+
+    public const S      = SDLScancode(22);
+    public const W      = SDLScancode(26);
+    public const ESCAPE = SDLScancode(41);	
+    public const SPACE  = SDLScancode(44);
+    public const RIGHT  = SDLScancode(79);
+    public const LEFT   = SDLScancode(80);
+    public const DOWN   = SDLScancode(81);
+    public const UP     = SDLScancode(82);
+}
+
+public struct SDLKeyboardState
+{
+    private static var state: pointer<int8>; // UInt*
+
+    public static func get()
+    {
+        pragma(mangledname, "SDL_PumpEvents")
+	    static func SDL_PumpEvents(): void;
+	
+        pragma(mangledname, "SDL_GetKeyboardState")
+	    static func SDL_GetKeyboardState(pointer<int32>): pointer<int8>;
+
+	    SDL_PumpEvents();
+	    state = SDL_GetKeyboardState(null);
+	    assert (state != null);
+	    return SDLKeyboardState();
+    }        	
+
+    public func isPressed(code: SDLScancode): bool
+    {
+        return state[code.value] != 0;
+    }   
+}
+
+
+unittest
+{
+    SDL.initVideo();
+    var kbdState = SDLKeyboardState.get();
+    SDL.quit();
+}
+
+func main() {}
