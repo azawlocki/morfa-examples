@@ -1,0 +1,246 @@
+module reactive.signal;
+
+import morfa.chrono.Time;
+import morfa.functional.base: curry;
+
+public template <V>
+struct Signal
+{
+    var sample: func(): V;
+}
+
+public operator sampleEach { kind = infix, precedence = assign }
+
+template <V>
+public func sampleEach(sig: Signal<V>, dt: Duration): void
+{
+    var now = Time.now;
+    var nextSample = now + dt;
+    sig.sample();
+
+    while (true)
+    {
+    	now = Time.now;
+    	if (now < nextSample)
+	    {
+	        sleep(nextSample - now);
+	        now = Time.now;
+            sig.sample();
+	    }
+	    nextSample += dt;
+    }
+}
+
+
+// Basic signals /////////////////////////////////////////////////////////////
+
+// Constructs a signal from a given sampling function
+public template <V>
+func signal(sample: func(): V): Signal<V>
+{
+    return Signal<V>(sample);
+}
+
+// Constructs a signal that returns a fixed value when sampled
+public template <V>
+func constant(val: V): Signal<V>
+{
+    return signal(func() { return val; });
+}
+
+
+
+//  Mapping a function over a signal /////////////////////////////////////////
+
+
+public operator ~~ { kind = infix, precedence = add }
+public operator <~ { kind = infix, precedence = add }
+public operator ~> { kind = infix, precedence = add }
+
+
+// A sample-wise application of a signal carrying a function
+// to a signal carrying a value.
+public template <V,W>
+func ~~ (sigFunc: Signal<func(V): W>, sigArg: Signal<V>): Signal<W>
+{
+    return signal(func()
+    {
+        var fun = sigFunc.sample();
+    	var arg = sigArg.sample();
+	    return fun(arg);
+    });
+}
+
+// An application of a function to a signal
+public template <W,V>
+func <~ (f: func(V): W, sig: Signal<V>): Signal<W>
+{
+    return constant(f) ~~ sig;
+}
+
+// An application of a function to a signal, in reverse notation
+public template <W,V>
+func ~> (sig: Signal<V>, f: func(V): W): Signal<W>
+{
+    return constant(f) ~~ sig;
+}
+
+
+unittest
+{
+    var two = constant(2);
+    var square = (n:int) { return n*n; };
+
+    var four = square <~ two;
+    assert (four.sample() == 4);
+
+	// Need to qualify: overload sets called (+) are defined in
+	// morfa.chrono.Time, morfa.chrono.Duration and tango.time.Time;
+    var add = curry<int,int,int> (__builtins.+);
+    var six = add <~ two ~~ four;
+    assert (six.sample() == 6);
+
+	var seven = six ~> func(n:int) { return n+1; };
+	assert (seven.sample() == 7);
+}
+
+
+// Overloading of mapping functions for signals carrying tuples
+
+import morfa.util.Tuple;
+
+public template <W,VV...>
+func <~ (f: func(VV): W, sig: Signal<Tuple<VV>>): Signal<W>
+{
+    func f2(t: Tuple<VV>): W { return f(t.elem); };
+    return f2 <~ sig;
+}
+
+public template <W,VV...>
+func ~> (sig: Signal<Tuple<VV>>, f: func(VV): W): Signal<W>
+{
+    func f2(t: Tuple<VV>): W { return f(t.elem); };
+    return f2 <~ sig;
+}
+
+
+// Merging signals ///////////////////////////////////////////////////////////
+
+public template <V1,V2,W>
+func zipWith(f: func(V1,V2): W, sig1: Signal<V1>, sig2: Signal<V2>): Signal<W>
+{
+    return curry(f) <~ sig1 ~~ sig2;
+}
+
+public template <V1,V2>
+func zip(sig1: Signal<V1>, sig2: Signal<V2>): Signal<Tuple<V1,V2>>
+{
+    return zipWith(tuple<V1,V2>, sig1, sig2);
+}
+
+unittest
+{
+    var two = constant(2);
+	var three = constant(3);
+	var pair = constant(tuple(6,7));
+	
+	var answer = cast<func(int,int):int> (*) <~ pair;
+	assert (answer.sample() == 42);
+
+	var six = cast<func(int,int):int> (*) <~ zip(two, three);
+	assert (six.sample() == 6);
+
+	var nine = zip(three, three) ~> cast<func(int,int):int> (*);
+	assert (nine.sample() == 9);
+}
+
+
+// Delay /////////////////////////////////////////////////////////////////////
+
+public template <V>
+func delay(init: V, sig: Signal<V>): Signal<V>
+{
+    var firstSample = true;
+    return signal(func() 
+    {
+        if (firstSample)
+	    {
+	        firstSample = false;
+	        return init;
+	    }
+	    return sig.sample();
+    });   
+}
+
+
+// Fold //////////////////////////////////////////////////////////////////////
+
+public template <State, Arg>
+func foldp(step: func(State, Arg): State, init: State, sig: Signal<Arg>): Signal<State>
+{
+    var state = init;
+    return signal(func() 
+    {
+        var result = state;
+    	state = step(state, sig.sample());
+	    return result;
+    });
+}
+
+public template <State, Args...>
+func foldp(step: func(State, Args): State, init: State, sig: Signal<Tuple<Args>>): Signal<State>
+{
+    return foldp((state: State, args: Tuple<Args>) { return step(state, args.elem); }, init, sig);
+}
+
+
+unittest
+{
+    var sig = constant(2);
+	var counter = foldp((total: int, a: int) { return total + a; }, 0, sig);
+	
+	assert (counter.sample() == 0);	
+	assert (counter.sample() == 2);	
+	assert (counter.sample() == 4);	
+	assert (counter.sample() == 6);	
+
+	var counter2 = foldp((total: int, a: int, b: int) { return total + a + b; }, 
+	    	             0, zip(sig,sig));
+
+	assert (counter2.sample() == 0);	
+	assert (counter2.sample() == 4);	
+	assert (counter2.sample() == 8);	
+	assert (counter2.sample() == 12);	
+}
+
+
+public template <V>
+func delta(base: Signal<V>): Signal<typeof(V.init - V.init)>
+{
+    var prevVal = base.sample();
+    return base ~>
+    	   func (newVal: V) { var result = newVal - prevVal; prevVal = newVal; return result; };
+}
+
+
+unittest
+{
+    var sig: Signal<int> = constant(2);
+	var counter: Signal<int> = foldp((total: int, a: int) { return total + a * a; }, 0, sig);
+	var diff: Signal<int> = delta(counter);
+	
+	assert (diff.sample() == 4);
+	assert (diff.sample() == 4);
+	assert (diff.sample() == 4);
+}
+
+
+// Temporal signals //////////////////////////////////////////////////////////
+
+public property clock(): Signal<Time>
+{
+    return signal(func() { return Time.now; });
+}
+
+
+func main () {}
