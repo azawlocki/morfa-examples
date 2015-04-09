@@ -37,7 +37,7 @@ class NBodySystem
     func new()
     {
         bodies = [ Body.Sun, Body.Jupiter, Body.Saturn, 
-	       	   Body.Uranus, Body.Neptune ];
+                   Body.Uranus, Body.Neptune ];
 
         var px = 0.0;
         var py = 0.0;

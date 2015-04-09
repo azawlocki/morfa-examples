@@ -20,14 +20,14 @@ public func sampleEach(sig: Signal<V>, dt: Duration): void
 
     while (true)
     {
-    	now = Time.now;
-    	if (now < nextSample)
-	    {
-	        sleep(nextSample - now);
-	        now = Time.now;
+        now = Time.now;
+        if (now < nextSample)
+        {
+            sleep(nextSample - now);
+            now = Time.now;
             sig.sample();
-	    }
-	    nextSample += dt;
+        }
+        nextSample += dt;
     }
 }
 
@@ -66,8 +66,8 @@ func ~~ (sigFunc: Signal<func(V): W>, sigArg: Signal<V>): Signal<W>
     return signal(func()
     {
         var fun = sigFunc.sample();
-    	var arg = sigArg.sample();
-	    return fun(arg);
+        var arg = sigArg.sample();
+        return fun(arg);
     });
 }
 
@@ -94,14 +94,14 @@ unittest
     var four = square <~ two;
     assert (four.sample() == 4);
 
-	// Need to qualify: overload sets called (+) are defined in
-	// morfa.chrono.Time, morfa.chrono.Duration and tango.time.Time;
+    // Need to qualify: overload sets called (+) are defined in
+    // morfa.chrono.Time, morfa.chrono.Duration and tango.time.Time;
     var add = curry<int,int,int> (__builtins.+);
     var six = add <~ two ~~ four;
     assert (six.sample() == 6);
 
-	var seven = six ~> func(n:int) { return n+1; };
-	assert (seven.sample() == 7);
+    var seven = six ~> func(n:int) { return n+1; };
+    assert (seven.sample() == 7);
 }
 
 
@@ -141,17 +141,17 @@ func zip(sig1: Signal<V1>, sig2: Signal<V2>): Signal<Tuple<V1,V2>>
 unittest
 {
     var two = constant(2);
-	var three = constant(3);
-	var pair = constant(tuple(6,7));
-	
-	var answer = cast<func(int,int):int> (*) <~ pair;
-	assert (answer.sample() == 42);
+    var three = constant(3);
+    var pair = constant(tuple(6,7));
 
-	var six = cast<func(int,int):int> (*) <~ zip(two, three);
-	assert (six.sample() == 6);
+    var answer = cast<func(int,int):int> (*) <~ pair;
+    assert (answer.sample() == 42);
 
-	var nine = zip(three, three) ~> cast<func(int,int):int> (*);
-	assert (nine.sample() == 9);
+    var six = cast<func(int,int):int> (*) <~ zip(two, three);
+    assert (six.sample() == 6);
+
+    var nine = zip(three, three) ~> cast<func(int,int):int> (*);
+    assert (nine.sample() == 9);
 }
 
 
@@ -164,11 +164,11 @@ func delay(init: V, sig: Signal<V>): Signal<V>
     return signal(func() 
     {
         if (firstSample)
-	    {
-	        firstSample = false;
-	        return init;
-	    }
-	    return sig.sample();
+        {
+            firstSample = false;
+            return init;
+        }
+        return sig.sample();
     });   
 }
 
@@ -182,8 +182,8 @@ func foldp(step: func(State, Arg): State, init: State, sig: Signal<Arg>): Signal
     return signal(func() 
     {
         var result = state;
-    	state = step(state, sig.sample());
-	    return result;
+        state = step(state, sig.sample());
+        return result;
     });
 }
 
@@ -197,20 +197,20 @@ func foldp(step: func(State, Args): State, init: State, sig: Signal<Tuple<Args>>
 unittest
 {
     var sig = constant(2);
-	var counter = foldp((total: int, a: int) { return total + a; }, 0, sig);
-	
-	assert (counter.sample() == 0);	
-	assert (counter.sample() == 2);	
-	assert (counter.sample() == 4);	
-	assert (counter.sample() == 6);	
+    var counter = foldp((total: int, a: int) { return total + a; }, 0, sig);
 
-	var counter2 = foldp((total: int, a: int, b: int) { return total + a + b; }, 
-	    	             0, zip(sig,sig));
+    assert (counter.sample() == 0);
+    assert (counter.sample() == 2);
+    assert (counter.sample() == 4);
+    assert (counter.sample() == 6);
 
-	assert (counter2.sample() == 0);	
-	assert (counter2.sample() == 4);	
-	assert (counter2.sample() == 8);	
-	assert (counter2.sample() == 12);	
+    var counter2 = foldp((total: int, a: int, b: int) { return total + a + b; },
+                         0, zip(sig,sig));
+
+    assert (counter2.sample() == 0);
+    assert (counter2.sample() == 4);
+    assert (counter2.sample() == 8);
+    assert (counter2.sample() == 12);
 }
 
 
@@ -219,19 +219,19 @@ func delta(base: Signal<V>): Signal<typeof(V.init - V.init)>
 {
     var prevVal = base.sample();
     return base ~>
-    	   func (newVal: V) { var result = newVal - prevVal; prevVal = newVal; return result; };
+           func (newVal: V) { var result = newVal - prevVal; prevVal = newVal; return result; };
 }
 
 
 unittest
 {
     var sig: Signal<int> = constant(2);
-	var counter: Signal<int> = foldp((total: int, a: int) { return total + a * a; }, 0, sig);
-	var diff: Signal<int> = delta(counter);
-	
-	assert (diff.sample() == 4);
-	assert (diff.sample() == 4);
-	assert (diff.sample() == 4);
+    var counter: Signal<int> = foldp((total: int, a: int) { return total + a * a; }, 0, sig);
+    var diff: Signal<int> = delta(counter);
+
+    assert (diff.sample() == 4);
+    assert (diff.sample() == 4);
+    assert (diff.sample() == 4);
 }
 
 

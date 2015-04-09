@@ -24,29 +24,29 @@ func main()
 
 struct Random
 {
-	// The usual pseudo-random number generator
-	const IM: int = 139968;
-	const IA: int = 3877;
-	const IC: int = 29573;
-	static var seed: int = 42;
+    // The usual pseudo-random number generator
+    const IM: int = 139968;
+    const IA: int = 3877;
+    const IC: int = 29573;
+    static var seed: int = 42;
 
-	static func next(max: float): float
-	{
-	    seed = (seed * IA + IC) % IM;
-		return max * seed * 1.0 / IM;
-	}
+    static func next(max: float): float
+    {
+        seed = (seed * IA + IC) % IM;
+        return max * seed * 1.0 / IM;
+    }
 }
 
 
 // Weighted selection from alphabet
 const ALU =
-		"GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG" ~
-		"GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA" ~
-		"CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT" ~
-		"ACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCA" ~
-		"GCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGG" ~
-		"AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC" ~
-		"AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA";
+        "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG" ~
+        "GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA" ~
+        "CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT" ~
+        "ACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCA" ~
+        "GCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGG" ~
+        "AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC" ~
+        "AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA";
 
 struct Frequency
 {
@@ -58,21 +58,21 @@ property IUB(): Frequency[]
 {
     static var table: Frequency[] = makeCumulative(
                 [ Frequency('a', 0.27)
-            	, Frequency('c', 0.12)
-            	, Frequency('g', 0.12)
-            	, Frequency('t', 0.27)
-            	, Frequency('B', 0.02)
-            	, Frequency('D', 0.02)
-            	, Frequency('H', 0.02)
-            	, Frequency('K', 0.02)
-            	, Frequency('M', 0.02)
-            	, Frequency('N', 0.02)
-            	, Frequency('R', 0.02)
-            	, Frequency('S', 0.02)
-            	, Frequency('V', 0.02)
-            	, Frequency('W', 0.02)
-            	, Frequency('Y', 0.02)
-            	]);
+                , Frequency('c', 0.12)
+                , Frequency('g', 0.12)
+                , Frequency('t', 0.27)
+                , Frequency('B', 0.02)
+                , Frequency('D', 0.02)
+                , Frequency('H', 0.02)
+                , Frequency('K', 0.02)
+                , Frequency('M', 0.02)
+                , Frequency('N', 0.02)
+                , Frequency('R', 0.02)
+                , Frequency('S', 0.02)
+                , Frequency('V', 0.02)
+                , Frequency('W', 0.02)
+                , Frequency('Y', 0.02)
+                ]);
     return table;
 }
 
@@ -80,10 +80,10 @@ property HomoSapiens(): Frequency[]
 {
     static var table: Frequency[] = makeCumulative(
                 [ Frequency('a', 0.3029549426680)
-		        , Frequency('c', 0.1979883004921)
-		        , Frequency('g', 0.1975473066391)
-		        , Frequency('t', 0.3015094502008)
-		        ]);
+                , Frequency('c', 0.1979883004921)
+                , Frequency('g', 0.1975473066391)
+                , Frequency('t', 0.3015094502008)
+                ]);
     return table;
 }
 
@@ -92,10 +92,10 @@ func makeCumulative(a: Frequency[]): Frequency[]
     var cp = 0.0;
     for (i in range(a.length))
     {
-		cp += a[i].p;
-		a[i].p = cp;
-	}
-	return a;
+        cp += a[i].p;
+        a[i].p = cp;
+    }
+    return a;
 }
 
 // naive
@@ -104,11 +104,11 @@ func selectRandom(a: Frequency[]): int8
     var r = Random.next(1.0);
 
     for (i in range(a.length))
-	{
-		if (r < a[i].p)
-			return a[i].c;
+    {
+        if (r < a[i].p)
+            return a[i].c;
     }
-	return a[a.length-1].c;
+    return a[a.length-1].c;
 }
 
 func makeRandomFasta(id: text, desc: text, a: Frequency[], n: int)
@@ -137,29 +137,29 @@ func writeFasta(id: text, desc: text, n: int, nextByte: func(): int8)
     var m = 0;
 
     var descStr: int8[] = (">" ~ id ~ " " ~ desc ~ "\n").encodeAscii();
-	stdout.writeAll(descStr);
+    stdout.writeAll(descStr);
 
-	while (n > 0)
-	{
-		m = if (n < LineLength) n else LineLength;
+    while (n > 0)
+    {
+        m = if (n < LineLength) n else LineLength;
 
-		if (buf.length - index < m)
-		{
-			stdout.write(buf, 0, index);
-			index = 0;
-		}
+        if (buf.length - index < m)
+        {
+            stdout.write(buf, 0, index);
+            index = 0;
+        }
 
-		for (i in range(m))
-		{
-			buf[index] = nextByte();
-			index += 1;
-		}
+        for (i in range(m))
+        {
+            buf[index] = nextByte();
+            index += 1;
+        }
 
-		buf[index] = '\n';
-		index += 1;
-		n -= LineLength;
-	}
+        buf[index] = '\n';
+        index += 1;
+        n -= LineLength;
+    }
 
-	if (index != 0)
-		stdout.write(buf, 0, index);
+    if (index != 0)
+        stdout.write(buf, 0, index);
 }
