@@ -241,6 +241,3 @@ public property clock(): Signal<Time>
 {
     return signal(func() { return Time.now; });
 }
-
-
-func main () {}

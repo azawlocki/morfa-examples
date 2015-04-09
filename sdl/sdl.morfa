@@ -357,5 +357,3 @@ unittest
     var kbdState = SDLKeyboardState.get();
     SDL.quit();
 }
-
-func main() {}
