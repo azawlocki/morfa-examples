@@ -1,0 +1,165 @@
+// The Computer Language Benchmarks Game
+// http://benchmarksgame.alioth.debian.org
+// entry: fasta
+// 
+// Based on the C# Mono contribution by Isaac Gouy
+
+module benchmarks.fasta;
+
+import morfa.io.device.StdOut;
+import morfa.util.Range;
+import mcl.Environment: Environment;
+import mcl.Text.parsers: parseDecimalInt;
+
+func main()
+{
+    var args = Environment.getCommandLineArgs();
+    var n = if (args.length > 1) parseDecimalInt(args[1]) else 1000;
+
+    makeRepeatFasta("ONE", "Homo sapiens alu", ALU.encodeAscii(), n*2);
+    makeRandomFasta("TWO", "IUB ambiguity codes", IUB, n*3);
+    makeRandomFasta("THREE", "Homo sapiens frequency", HomoSapiens, n*5);
+}
+
+
+struct Random
+{
+	// The usual pseudo-random number generator
+	const IM: int = 139968;
+	const IA: int = 3877;
+	const IC: int = 29573;
+	static var seed: int = 42;
+
+	static func next(max: float): float
+	{
+	    seed = (seed * IA + IC) % IM;
+		return max * seed * 1.0 / IM;
+	}
+}
+
+
+// Weighted selection from alphabet
+const ALU =
+		"GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG" ~
+		"GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA" ~
+		"CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT" ~
+		"ACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCA" ~
+		"GCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGG" ~
+		"AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC" ~
+		"AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA";
+
+struct Frequency
+{
+    var c: int8;
+    var p: float;
+}
+
+property IUB(): Frequency[]
+{
+    static var table: Frequency[] = makeCumulative(
+                [ Frequency('a', 0.27)
+            	, Frequency('c', 0.12)
+            	, Frequency('g', 0.12)
+            	, Frequency('t', 0.27)
+            	, Frequency('B', 0.02)
+            	, Frequency('D', 0.02)
+            	, Frequency('H', 0.02)
+            	, Frequency('K', 0.02)
+            	, Frequency('M', 0.02)
+            	, Frequency('N', 0.02)
+            	, Frequency('R', 0.02)
+            	, Frequency('S', 0.02)
+            	, Frequency('V', 0.02)
+            	, Frequency('W', 0.02)
+            	, Frequency('Y', 0.02)
+            	]);
+    return table;
+}
+
+property HomoSapiens(): Frequency[]
+{
+    static var table: Frequency[] = makeCumulative(
+                [ Frequency('a', 0.3029549426680)
+		        , Frequency('c', 0.1979883004921)
+		        , Frequency('g', 0.1975473066391)
+		        , Frequency('t', 0.3015094502008)
+		        ]);
+    return table;
+}
+
+func makeCumulative(a: Frequency[]): Frequency[]
+{
+    var cp = 0.0;
+    for (i in range(a.length))
+    {
+		cp += a[i].p;
+		a[i].p = cp;
+	}
+	return a;
+}
+
+// naive
+func selectRandom(a: Frequency[]): int8
+{
+    var r = Random.next(1.0);
+
+    for (i in range(a.length))
+	{
+		if (r < a[i].p)
+			return a[i].c;
+    }
+	return a[a.length-1].c;
+}
+
+func makeRandomFasta(id: text, desc: text, a: Frequency[], n: int)
+{
+    writeFasta(id, desc, n, func() {
+                   return selectRandom(a);
+               });
+}
+
+func makeRepeatFasta(id: text, desc: text, alu: int8[], n: int)
+{
+    writeFasta(id, desc, n, func() {
+                   static var k = 0;
+                   var res = alu[k % alu.length];
+                   k+= 1;
+                   return res;
+               });
+}
+
+
+func writeFasta(id: text, desc: text, n: int, nextByte: func(): int8)
+{
+    const LineLength = 60;
+    var index = 0;
+    var buf = new int8[1024];
+    var m = 0;
+
+    var descStr: int8[] = (">" ~ id ~ " " ~ desc ~ "\n").encodeAscii();
+	stdout.writeAll(descStr);
+
+	while (n > 0)
+	{
+		m = if (n < LineLength) n else LineLength;
+
+		if (buf.length - index < m)
+		{
+			stdout.write(buf, 0, index);
+			index = 0;
+		}
+
+		for (i in range(m))
+		{
+			buf[index] = nextByte();
+			index += 1;
+		}
+
+		buf[index] = '\n';
+		index += 1;
+		n -= LineLength;
+	}
+
+	if (index != 0)
+		stdout.write(buf, 0, index);
+}
