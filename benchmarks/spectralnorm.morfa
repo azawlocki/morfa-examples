@@ -1,0 +1,93 @@
+// The Computer Language Benchmarks Game
+// http://benchmarksgame.alioth.debian.org
+// entry: spectral-norm
+//
+// Based on the C# Mono contribution by Isaac Gouy
+
+module benchmarks.spectralnorm;
+
+import morfa.io.print: printf;
+import morfa.math.base: sqrt;
+import morfa.util.Range;
+import mcl.Environment: Environment;
+import mcl.Text.parsers: parseDecimalInt;
+
+func main()
+{
+    // Default number of iterations, override with commandline arg
+    var n = 5500; 
+
+    var args = Environment.getCommandLineArgs();
+    if (args.length > 1)
+        n = parseDecimalInt(args[1]);
+
+    printf("{%d.9}\n", Approximate(n));
+}
+
+func Approximate(n: int): float
+{
+   // create unit vector
+   var u = new float[n];
+   for (i in range(n))
+       u[i] = 1;
+
+   // 20 steps of the power method
+   var v = new float[n];
+   for (i in range(n))
+       v[i] = 0;
+
+   for (i in range(10))
+   {
+       MultiplyAtAv(n,u,v);
+       MultiplyAtAv(n,v,u);
+   }
+
+   // B = A^T * A      (A^T is A transposed)
+   // v.Bv / (v.v)     (eigenvalue of v)
+   var vBv: float = 0;
+   var vv: float = 0;
+   for (i in range(n))
+   {
+       vBv += u[i] * v[i];
+       vv  += v[i] * v[i];
+   }
+
+   return sqrt(vBv / vv);
+}
+
+// Return element at i,j from infinite matrix A
+func A(i: int, j: int): float
+{
+    return 1.0 / ((i+j) * (i+j+1) / 2 + i + 1);
+}
+
+// Multiply vector v by matrix A
+func MultiplyAv(n: int, v: float[], Av: float[])
+{
+    for (i in range(n))
+    {
+        Av[i] = 0;
+        for (j in range(n))
+            Av[i] += A(i,j) * v[j];
+    }
+}
+
+// Multiply vector v by matrix A transposed
+func MultiplyAtv(n: int, v: float[], Atv: float[])
+{
+    for (i in range(n))
+    {
+        Atv[i] = 0;
+        for (j in range(n))
+            Atv[i] += A(j,i) * v[j];
+    }
+}
+
+// Multiply vector v by matrix A and then by A transposed
+func MultiplyAtAv(n: int, v: float[], AtAv: float[])
+{
+    var u = new float[n];
+    MultiplyAv(n,v,u);
+    MultiplyAtv(n,u,AtAv);
+}
+
