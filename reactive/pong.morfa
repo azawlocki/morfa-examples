@@ -1,0 +1,256 @@
+﻿// Requires SDL 2.0
+// Run with: morfai -run dsl.morfa --load /usr/lib/x86_64-linux-gnu/libSDL2.so
+
+module reactive.pong;
+
+import sdl.sdl;
+import reactive.signal;
+import morfa.chrono.Duration;
+import morfa.chrono.Time: Time;
+import morfa.io.print;
+
+
+template <T>
+func abs(a: T): T
+{
+    return if (a < 0.0) -a else a;
+}
+
+template <T>
+func clamp(low: T, current: T, high: T): T
+{
+    if (current < low)
+       return low;
+    if (current > high)
+       return high;
+    return current;
+}
+
+
+// Model
+
+const halfWidth  = 300;
+const halfHeight = 200;
+
+alias Distance = float;
+alias Velocity = float;
+
+struct GameObject
+{
+    var x: Distance;
+    var y: Distance;
+
+    var vx: Velocity;
+    var vy: Velocity;
+
+    // Size of the bounding rectangle, (x,y) is the center
+    var w: Distance;
+    var h: Distance;
+
+    func updatePosition(dt: float)
+    {
+        x += vx * dt;
+	    y += vy * dt;
+    }
+}
+
+
+func collide(obj1: GameObject, obj2: GameObject): bool
+{
+    var dx = (obj1.w + obj2.w) / 2;
+    var dy = (obj1.h + obj2.h) / 2;
+
+    return abs(obj1.x - obj2.x) <= dx 
+       and abs(obj1.y - obj2.y) <= dy;
+}
+
+struct Game
+{
+    var isPaused: bool;
+    var isFinished: bool;
+    var ball: GameObject;
+    var paddle1: GameObject;
+    var paddle2: GameObject;    
+    var score1: int;
+    var score2: int;
+
+    static func init(): Game
+    {
+        return Game() with
+	    {
+	        isPaused = true;
+	        isFinished = false;
+	        ball = GameObject(0, 0, 200, 200, 10, 10);
+	        paddle1 = GameObject(-halfWidth + 20, 0, 0, 0, 10, 40);
+	        paddle2 = GameObject( halfWidth - 20, 0, 0, 0, 10, 40);
+        };
+    }
+}
+
+
+// Input
+
+enum Direction { NONE, UP, DOWN }
+
+struct Input
+{
+    var dir1: Direction;
+    var dir2: Direction;
+    var spacePressed: bool;
+    var escapePressed: bool;
+}
+
+func asFloat(dir: Direction): float
+{
+    return if (dir == Direction.UP) 1 else if (dir == Direction.NONE) 0 else -1;
+}	
+
+func readKeys(): Input
+{
+    var input: Input;
+    var kbdState = SDLKeyboardState.get();
+
+    input.spacePressed = kbdState.isPressed(SDLScancode.SPACE);
+    input.escapePressed = kbdState.isPressed(SDLScancode.ESCAPE);
+    input.dir1 = if (kbdState.isPressed(SDLScancode.W)) Direction.UP
+                 else if (kbdState.isPressed(SDLScancode.S)) Direction.DOWN
+		         else Direction.NONE;
+    input.dir2 = if (kbdState.isPressed(SDLScancode.UP)) Direction.UP
+                 else if (kbdState.isPressed(SDLScancode.DOWN)) Direction.DOWN
+		         else Direction.NONE;
+    return input;		
+}
+
+
+func main()
+{
+    SDL.initVideo();
+    scope (exit) 
+        SDL.quit();
+
+    var view = new View;
+
+    var input  = signal(readKeys);
+    var dt     = delta(clock) ~> (d: Duration) { return d.interval; };
+    var game   = foldp(updateGame, Game.init(), zip(input, dt));
+    var update = game ~> view.show;
+
+    update sampleAt (30 fps
+                    until (finished: bool) { return finished; });
+    println("Bye!");
+}
+
+
+
+// Update
+
+func updateBall(game: Game, input: Input, delta: float): GameObject
+{
+    if (collide(game.ball, game.paddle1) and game.ball.vx < 0)
+    {
+        game.ball.vx *= -1;
+	    game.ball.vy += 0.2 * game.paddle1.vy;
+    }
+    if (collide(game.ball, game.paddle2) and game.ball.vx > 0)
+    {
+        game.ball.vx *= -1;
+	    game.ball.vy += 0.2 * game.paddle2.vy;
+    }
+    if (game.ball.y < -halfHeight + 7 and game.ball.vy < 0)
+        game.ball.vy *= -1;
+    if (game.ball.y > halfHeight - 7 and game.ball.vy > 0)
+        game.ball.vy *= -1;
+
+    game.ball.updatePosition(delta);
+    return game.ball;
+}
+
+func resetBall(ball: GameObject): GameObject
+{
+    ball.x = 0;
+    ball.y = 0;
+    ball.vx = if (ball.vx > 0) -200 else 200;
+    ball.vy = if (ball.vy > 0) 200 else -200;
+    return ball;
+}
+
+func updateGame(game: Game, input: Input, delta: float): Game
+{
+    if (input.spacePressed)
+       game.isPaused = false;
+
+    if (input.escapePressed)
+       game.isFinished = true;
+
+    if (game.ball.x >  halfWidth)
+    {
+        game.isPaused = true;
+        game.score1 += 1;		
+        game.ball = resetBall(game.ball);
+    }	
+    else if (game.ball.x < -halfWidth) 
+    {
+        game.isPaused = true;
+        game.score2 += 1;
+        game.ball = resetBall(game.ball);
+    }
+
+    if (not game.isPaused)
+        game.ball = updateBall(game, input, delta);
+
+    game.paddle1 = updatePaddle(delta, input.dir1, game.paddle1);
+    game.paddle2 = updatePaddle(delta, input.dir2, game.paddle2);
+
+    return game;
+}
+
+
+func updatePaddle(delta: float, dir: Direction, paddle: GameObject): GameObject
+{
+    paddle.vy = asFloat(dir) * 200;
+    paddle.updatePosition(delta);
+    paddle.y = clamp(-halfHeight + 22, paddle.y, halfHeight - 22);
+    return paddle;
+}
+
+
+
+// View
+
+class View
+{
+    var window: SDLWindow;
+    var renderer: SDLRenderer;
+
+    func new()
+    {
+	    window = new SDLWindow("Pong", 100, 100, 2 * halfWidth, 2 * halfHeight);
+	    renderer = new SDLRenderer(window);
+    }	
+
+    func show(game: Game): bool
+    {
+        if (game.isFinished)
+            return false;
+
+	    renderer.clear();
+
+	    var offsetX = halfWidth;
+	    var offsetY = halfHeight;
+
+	    renderer.fillRect(cast<int32> (offsetX + game.ball.x - 5),
+		   	              cast<int32> (offsetY - game.ball.y - 5),
+			              10, 10);
+
+        renderer.fillRect(cast<int32> (offsetX + game.paddle1.x - 5),
+		                  cast<int32> (offsetY - game.paddle1.y - 20),
+			              10, 40);
+
+        renderer.fillRect(cast<int32> (offsetX + game.paddle2.x - 5),
+		                  cast<int32> (offsetY - game.paddle2.y - 20),
+			              10, 40);
+ 
+        renderer.present();
+	    return true;
+    }
+}
