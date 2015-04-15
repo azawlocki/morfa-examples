@@ -7,6 +7,7 @@
 module benchmarks.fasta;
 
 import morfa.io.device.StdOut;
+import morfa.util.arrays: toArray;
 import morfa.util.Range;
 import mcl.Environment: Environment;
 import mcl.Text.parsers: parseDecimalInt;
@@ -128,7 +129,6 @@ func makeRepeatFasta(id: text, desc: text, alu: int8[], n: int)
                });
 }
 
-
 func writeFasta(id: text, desc: text, n: int, nextByte: func(): int8)
 {
     const LineLength = 60;
@@ -145,7 +145,7 @@ func writeFasta(id: text, desc: text, n: int, nextByte: func(): int8)
 
         if (buf.length - index < m)
         {
-            stdout.write(buf, 0, index);
+            stdout.write(toArray(buf.ptr, index));
             index = 0;
         }
 
@@ -161,5 +161,5 @@ func writeFasta(id: text, desc: text, n: int, nextByte: func(): int8)
     }
 
     if (index != 0)
-        stdout.write(buf, 0, index);
+        stdout.write(toArray(buf.ptr, index));
 }
