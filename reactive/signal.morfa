@@ -1,34 +1,16 @@
+// Must be linked with libSDL2. For example:
+// morfai -run reactive/pong.morfa --load /usr/lib/x86_64-linux-gnu/libSDL2.so
+
 module reactive.signal;
 
 import morfa.chrono.Time;
+import morfa.chrono.Duration;
 import morfa.functional.base: curry;
 
 public template <V>
 struct Signal
 {
     var sample: func(): V;
-}
-
-public operator sampleEach { kind = infix, precedence = assign }
-
-template <V>
-public func sampleEach(sig: Signal<V>, dt: Duration): void
-{
-    var now = Time.now;
-    var nextSample = now + dt;
-    sig.sample();
-
-    while (true)
-    {
-        now = Time.now;
-        if (now < nextSample)
-        {
-            sleep(nextSample - now);
-            now = Time.now;
-            sig.sample();
-        }
-        nextSample += dt;
-    }
 }
 
 
@@ -241,3 +223,69 @@ public property clock(): Signal<Time>
 {
     return signal(func() { return Time.now; });
 }
+
+
+// Signal sampling ///////////////////////////////////////////////////////////
+
+template <V>
+func run(sig: Signal<V>, interval: Duration, condition: func(V): bool): void
+{
+    var now = Time.now;
+    var nextSample = now + interval;
+    var val = sig.sample();
+
+    while (condition(val))
+    {
+        now = Time.now;
+        if (now < nextSample)
+        {
+            sleep(nextSample - now);
+            val = sig.sample();
+        }
+        nextSample += interval;
+    }
+}
+
+
+struct IntervalSampler
+{
+    var interval: Duration;
+}
+
+public operator fps { kind = postfix, precedence = not }
+public func $fps (rate: int): IntervalSampler
+{
+    var dt = Duration.fromSeconds(1.0 / rate);
+    return IntervalSampler(dt);
+}
+
+
+
+template <V>
+struct BoundedSampler
+{
+    var interval: Duration;
+    var condition: func(V): bool;
+}
+
+public operator until { kind = infix, precedence = add }
+public template <V> func until (sampler: IntervalSampler, exitCondition: func(V): bool ): BoundedSampler<V>
+{
+    return BoundedSampler<V>(sampler.interval, exitCondition);
+}
+
+
+public operator sampleAt { kind = infix, precedence = assign }
+
+public template <V>
+func sampleAt(sig: Signal<V>, sampler: IntervalSampler): void
+{
+    run(sig, sampler.interval, (_:V) { return true; });
+}
+
+public template <V>
+func sampleAt(sig: Signal<V>, sampler: BoundedSampler<V>): void
+{
+    run(sig, sampler.interval, sampler.condition);
+}
+
